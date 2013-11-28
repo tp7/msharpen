@@ -539,6 +539,9 @@ class MSharpen : public GenericVideoFilter {
 public:
     MSharpen(PClip child, int threshold, int strength, bool highq, bool mask, IScriptEnvironment* env);
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment *env);
+    ~MSharpen() {
+        _aligned_free(blur_buffer);
+    }
 
 private:
     int threshold_;
@@ -552,7 +555,8 @@ private:
 
 
 MSharpen::MSharpen(PClip child, int threshold, int strength, bool highq, bool mask, IScriptEnvironment* env)
-    : GenericVideoFilter(child), threshold_(threshold), strength_(strength), highq_(highq), show_mask_(mask)
+: GenericVideoFilter(child), threshold_(threshold), strength_(strength),
+highq_(highq), show_mask_(mask), blur_buffer(nullptr)
 {
     if (!(vi.IsPlanar() || vi.IsRGB32())) {
         env->ThrowError("MSharpen: YUY2, RGB32 or planar (YV12 for instance) color space required");
