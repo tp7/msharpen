@@ -128,8 +128,10 @@ static void planar_detect_edges_sse2(uint8_t *dstp, const uint8_t *srcp, int dst
     int loop_limit = std::min(width+15, dst_pitch);
 
     __m128i thresh_vector = _mm_set1_epi8(threshold);
+#pragma warning(disable: 4309)
     __m128i ff = _mm_set1_epi8(0xFF);
     __m128i left_mask  = _mm_set_epi16(0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0);
+#pragma warning(default: 4309)
 
     const uint8_t *srcpn = srcp+src_pitch;
     memset(dstp, 0, height * dst_pitch);
@@ -376,10 +378,6 @@ static void planar_apply_filter_sse2(uint8_t *dstp, const uint8_t *srcp, const u
 
 
 static void rgb_blur_c(uint8_t *blurp, const uint8_t *srcp, int blur_pitch, int src_pitch, int height, int width) {
-    /* Vertical. */
-    uint8_t *blurp_saved = blurp;
-    const uint8_t *srcp_saved = srcp;
-
     memcpy(blurp, srcp, width);
 
     const uint8_t *srcpp = srcp;
@@ -404,7 +402,7 @@ static void rgb_blur_c(uint8_t *blurp, const uint8_t *srcp, int blur_pitch, int 
         blurp += blur_pitch;
     }
 
-    memcpy(blurp_saved + (height-1)*blur_pitch, srcp_saved + (height-1)*src_pitch, width);
+    memcpy(blurp, srcp, width);
 }
 
 static void rgb_detect_edges_c(uint8_t *dstp, const uint8_t *blurp, int dst_pitch, int blur_pitch, int height, int width, int threshold) {
@@ -418,7 +416,7 @@ static void rgb_detect_edges_c(uint8_t *dstp, const uint8_t *blurp, int dst_pitc
                 (std::abs(blurp[x+2] - blurpn[x+6]) >= threshold) ||
                 (std::abs(blurp[x+4] - blurpn[x+0]) >= threshold) || 
                 (std::abs(blurp[x+5] - blurpn[x+1]) >= threshold) || 
-                (std::abs(blurp[x+4] - blurpn[x+0]) >= threshold)) //todo: this should be +6 and +2, bug in original msharpen
+                (std::abs(blurp[x+6] - blurpn[x+2]) >= threshold))
             {
                  *reinterpret_cast<uint32_t*>(dstp+x) = 0xffffffff;
             }
@@ -656,9 +654,7 @@ PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
 
 AVSValue __cdecl Create_MSharpen(AVSValue args, void*, IScriptEnvironment* env) {
     enum { CLIP, THRESH, STRENGTH, HIGHQ, MASK };
-#pragma warning(disable: 4244) //output is no longer identical when AsFloat is used instead of AsDblDef
     return new MSharpen(args[CLIP].AsClip(), args[THRESH].AsInt(15), args[STRENGTH].AsInt(100), args[HIGHQ].AsBool(true), args[MASK].AsBool(false), env);
-#pragma warning(default: 4244)
 }
 
 const AVS_Linkage *AVS_linkage = nullptr;
