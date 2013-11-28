@@ -592,7 +592,7 @@ PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
             int height = src->GetHeight(plane);
 
             if (env->GetCPUFlags() & CPUF_SSE2) {
-                planar_blur_c(blur_buffer, srcp, blur_pitch, src_pitch, height, width);
+                planar_blur_sse2(blur_buffer, srcp, blur_pitch, src_pitch, height, width);
 
                 if (is_ptr_aligned(srcp, 16)) {
                     planar_detect_edges_sse2(dstp, blur_buffer, dst_pitch, blur_pitch, height, width, threshold_, show_mask_);
