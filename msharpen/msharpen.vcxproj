@@ -76,10 +76,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)\Build\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\Build\$(Platform)\Temp\$(Configuration)\</IntDir>
+    <IncludePath>$(AVISYNTH_SDK_PATH)\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)\Build\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)\Build\$(Platform)\Temp\$(Configuration)\</IntDir>
+    <IncludePath>$(AVISYNTH_SDK_PATH)\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -131,9 +133,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="msharpen.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="avisynth.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -2,6 +2,7 @@
 #define NOMINMAX
 #include <Windows.h>
 #include "avisynth.h"
+#include <avs/alignment.h>
 #include <math.h>
 #include <malloc.h>
 #include <emmintrin.h>
@@ -9,9 +10,6 @@
 #include <algorithm>
 
 
-inline bool is_ptr_aligned(const void *ptr, size_t align) {
-    return (((uintptr_t)ptr & ((uintptr_t)(align-1))) == 0);
-}
 
 static void planar_blur_c(uint8_t *dstp, const uint8_t *srcp, int dst_pitch, int src_pitch, int height, int width) {
     memcpy(dstp, srcp, width);
@@ -537,8 +535,9 @@ class MSharpen : public GenericVideoFilter {
 public:
     MSharpen(PClip child, int threshold, int strength, bool highq, bool mask, IScriptEnvironment* env);
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment *env);
-    ~MSharpen() {
-        _aligned_free(blur_buffer);
+
+    int __stdcall SetCacheHints(int cachehints, int frame_range) override {
+        return cachehints == CACHE_GET_MTMODE ? MT_NICE_FILTER : 0;
     }
 
 private:
@@ -547,17 +546,16 @@ private:
     bool highq_;
     bool show_mask_;
 
-    uint8_t* blur_buffer;
     size_t blur_pitch;
 };
 
 
 MSharpen::MSharpen(PClip child, int threshold, int strength, bool highq, bool mask, IScriptEnvironment* env)
 : GenericVideoFilter(child), threshold_(threshold), strength_(strength),
-highq_(highq), show_mask_(mask), blur_buffer(nullptr)
+highq_(highq), show_mask_(mask)
 {
     if (!(vi.IsPlanar() || vi.IsRGB32())) {
-        env->ThrowError("MSharpen: YUY2, RGB32 or planar (YV12 for instance) color space required");
+        env->ThrowError("MSharpen: RGB32 or planar (YV12 for instance) color space required");
     }
     if (strength < 0 || strength > 255) {
         env->ThrowError("MSharpen: strength out of range (0-255)");
@@ -565,14 +563,16 @@ highq_(highq), show_mask_(mask), blur_buffer(nullptr)
     int bytes_width = vi.IsRGB32() ? vi.width * 4 : vi.width;
 
     blur_pitch = (bytes_width + 15) / 16 * 16;
-    blur_buffer = reinterpret_cast<uint8_t*>(_aligned_malloc(blur_pitch * vi.height, 16));
-    if (!blur_buffer) {
-        env->ThrowError("MSharpen: malloc failure");
-    }
 }
 
 PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
 {
+    auto env2 = static_cast<IScriptEnvironment2*>(env);
+    auto blur_buffer = (uint8_t*)env2->Allocate(blur_pitch*vi.height, 16, AVS_POOLED_ALLOC);
+    if (!blur_buffer) {
+        env->ThrowError("MSharpen: failed to allocate memory!");
+    }
+
     PVideoFrame src = child->GetFrame(n, env);
     PVideoFrame dst = env->NewVideoFrame(vi);
 
@@ -594,7 +594,7 @@ PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
             if (env->GetCPUFlags() & CPUF_SSE2) {
                 planar_blur_sse2(blur_buffer, srcp, blur_pitch, src_pitch, height, width);
 
-                if (is_ptr_aligned(srcp, 16)) {
+                if (IsPtrAligned(srcp, 16)) {
                     planar_detect_edges_sse2(dstp, blur_buffer, dst_pitch, blur_pitch, height, width, threshold_, show_mask_);
                     if (highq_) {
                         planar_detect_edges_hiq_sse2(dstp, blur_buffer, dst_pitch, blur_pitch, height, width, threshold_);
@@ -622,6 +622,8 @@ PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
                 }
             }
         }
+
+        env2->Free(blur_buffer);
         return dst;
     }
 
@@ -643,16 +645,22 @@ PVideoFrame __stdcall MSharpen::GetFrame(int n, IScriptEnvironment *env)
     }
 
     if (show_mask_) {
+        env2->Free(blur_buffer);
         return dst;
     }
 
     rgb_apply_filter(dstp, blur_buffer, srcp, dst_pitch, blur_pitch, src_pitch, height, width, strength_);
-    
+
+    env2->Free(blur_buffer);
     return dst;
 }
 
 
 AVSValue __cdecl Create_MSharpen(AVSValue args, void*, IScriptEnvironment* env) {
+    if (!env->FunctionExists("SetFilterMtMode")) {
+        env->ThrowError("MSharpen: this plugin only works with multithreaded versions of Avisynth+!");
+    }
+
     enum { CLIP, THRESH, STRENGTH, HIGHQ, MASK };
     return new MSharpen(args[CLIP].AsClip(), args[THRESH].AsInt(15), args[STRENGTH].AsInt(100), args[HIGHQ].AsBool(true), args[MASK].AsBool(false), env);
 }
